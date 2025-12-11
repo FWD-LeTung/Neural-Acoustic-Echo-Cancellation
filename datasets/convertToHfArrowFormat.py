@@ -8,18 +8,18 @@ from datasets import DatasetInfo
 from datasets.arrow_writer import ArrowWriter
 from tqdm import tqdm
 
-root = "D:/Synthetic_Neural_AEC_dataset/NoisyAndDistortion"
+root = "D:/Synthetic_Neural_AEC_dataset/Test/NoNoise"
 csv_path = os.path.join(root, "dataset_config.csv")
 
 meta = pd.read_csv(csv_path)
 meta["mic_path"] = meta["mic_path"].str.replace("\\", "/")
 meta["ref_path"] = meta["ref_path"].str.replace("\\", "/")
 meta["clean_path"] = meta["clean_path"].str.replace("\\", "/")
-NUM_SHARDS = 6
+NUM_SHARDS = 2
 total = len(meta)
 shard_size = math.ceil(total / NUM_SHARDS)
 
-output_dir = "D:/Synthetic_Neural_AEC_dataset/NoiseAndDistortion_arrow"
+output_dir = "D:/Synthetic_Neural_AEC_dataset/Test/NoNoiseArrow"
 os.makedirs(output_dir, exist_ok=True)
 
 # ===== HF FEATURES =====
