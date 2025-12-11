@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "datasets[audio]>=4.4.1",
     "ipykernel>=7.1.0",
+    "matplotlib>=3.10.7",
     "scikit-learn>=1.8.0",
     "soundfile>=0.13.1",
     "tqdm>=4.67.1",
