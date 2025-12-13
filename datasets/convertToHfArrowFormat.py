@@ -2,39 +2,49 @@ import os
 import io
 import math
 import soundfile as sf
+import numpy as np
 import pandas as pd
 from datasets.features import Features, Value, Audio
 from datasets import DatasetInfo
 from datasets.arrow_writer import ArrowWriter
 from tqdm import tqdm
 
-root = "D:/Synthetic_Neural_AEC_dataset/Test/NoNoise"
-csv_path = os.path.join(root, "dataset_config.csv")
+
+
+root = "D:/Synthetic_Neural_AEC_dataset/TestSet_FixedSER"
+csv_path = os.path.join(root, "dataset_test_config.csv")
 
 meta = pd.read_csv(csv_path)
-meta["mic_path"] = meta["mic_path"].str.replace("\\", "/")
 meta["ref_path"] = meta["ref_path"].str.replace("\\", "/")
 meta["clean_path"] = meta["clean_path"].str.replace("\\", "/")
-NUM_SHARDS = 2
+meta["mic_path_ser_-10dB"] = meta["mic_path_ser_-10dB"].str.replace("\\", "/")
+meta["mic_path_ser_-5dB"] = meta["mic_path_ser_-5dB"].str.replace("\\", "/")
+meta["mic_path_ser_0dB"] = meta["mic_path_ser_0dB"].str.replace("\\", "/")
+meta["mic_path_ser_5dB"] = meta["mic_path_ser_5dB"].str.replace("\\", "/")
+meta["mic_path_ser_10dB"] = meta["mic_path_ser_10dB"].str.replace("\\", "/")
+NUM_SHARDS = 4
 total = len(meta)
 shard_size = math.ceil(total / NUM_SHARDS)
 
-output_dir = "D:/Synthetic_Neural_AEC_dataset/Test/NoNoiseArrow"
+output_dir = "D:/Synthetic_Neural_AEC_dataset/Test/FixdB"
 os.makedirs(output_dir, exist_ok=True)
 
 # ===== HF FEATURES =====
 features = Features({
     "id": Value("string"),
-    "mic": Audio(sampling_rate=16000),
-    "ref": Audio(sampling_rate=16000),
     "clean": Audio(sampling_rate=16000),
-    "endpoint_bool": Value("bool"),
-    "ser_db": Value("float32"),
-    "snr_db": Value("float32"),
+    "ref": Audio(sampling_rate=16000),
+    "mic_neg_10dB": Audio(sampling_rate=16000),
+    "mic_neg_5dB": Audio(sampling_rate=16000),
+    "mic_0dB": Audio(sampling_rate=16000),
+    "mic_5dB": Audio(sampling_rate=16000),
+    "mic_10dB": Audio(sampling_rate=16000),
     "distortion_type": Value("string"),
+    "endpoint_bool": Value("bool"),
     "source_near_end": Value("string"),
     "source_echo": Value("string"),
 })
+
 
 row_i = 0
 
@@ -50,17 +60,42 @@ for shard_id in range(NUM_SHARDS):
             row = meta.iloc[row_i]
             row_i += 1
 
-            mic_file = os.path.join(root, row["mic_path"])
-            ref_file = os.path.join(root, row["ref_path"])
             clean_file = os.path.join(root, row["clean_path"])
+            ref_file = os.path.join(root, row["ref_path"])
+            mic_neg_10dB_file = os.path.join(root, row["mic_path_ser_-10dB"])
+            mic_neg_5dB_file = os.path.join(root, row["mic_path_ser_-5dB"])
+            mic_0dB_file = os.path.join(root, row["mic_path_ser_0dB"])
+            mic_5dB_file = os.path.join(root, row["mic_path_ser_5dB"])
+            mic_10dB_file = os.path.join(root, row["mic_path_ser_10dB"])
+
             # ==== Load audio ==== 
-            mic_audio, sr_mic = sf.read(mic_file)
+            mic_neg_10dB_audio, sr_mic_neg_10dB_audio = sf.read(mic_neg_10dB_file)
+            mic_neg_5dB_audio, sr_mic_neg_5dB_audio = sf.read(mic_neg_5dB_file)
+            mic_0dB_audio, sr_mic_0dB_audio = sf.read(mic_0dB_file)
+            mic_5dB_audio, sr_mic_5dB_audio = sf.read(mic_5dB_file)
+            mic_10dB_audio, sr_mic_10dB_audio = sf.read(mic_10dB_file)
             ref_audio, sr_ref = sf.read(ref_file)
             clean_audio, sr_clean = sf.read(clean_file)
             # encode to bytes
-            mic_bytes = io.BytesIO()
-            sf.write(mic_bytes, mic_audio, sr_mic, format="WAV")
-            mic_bytes = mic_bytes.getvalue()
+            mic_neg_10dB_bytes = io.BytesIO()
+            sf.write(mic_neg_10dB_bytes, mic_neg_10dB_audio, sr_mic_neg_10dB_audio, format="WAV")
+            mic_neg_10dB_bytes = mic_neg_10dB_bytes.getvalue()
+
+            mic_neg_5dB_bytes = io.BytesIO()
+            sf.write(mic_neg_5dB_bytes, mic_neg_5dB_audio, sr_mic_neg_5dB_audio, format="WAV")
+            mic_neg_5dB_bytes = mic_neg_5dB_bytes.getvalue()
+
+            mic_0dB_bytes = io.BytesIO()
+            sf.write(mic_0dB_bytes, mic_0dB_audio, sr_mic_0dB_audio, format="WAV")
+            mic_0dB_bytes = mic_0dB_bytes.getvalue()
+
+            mic_5dB_bytes = io.BytesIO()
+            sf.write(mic_5dB_bytes, mic_5dB_audio, sr_mic_5dB_audio, format="WAV")
+            mic_5dB_bytes = mic_5dB_bytes.getvalue()
+
+            mic_10dB_bytes = io.BytesIO()
+            sf.write(mic_10dB_bytes, mic_10dB_audio, sr_mic_10dB_audio, format="WAV")
+            mic_10dB_bytes = mic_10dB_bytes.getvalue()
 
             ref_bytes = io.BytesIO()
             sf.write(ref_bytes, ref_audio, sr_ref, format="WAV")
@@ -72,13 +107,15 @@ for shard_id in range(NUM_SHARDS):
 
             writer.write({
                 "id": row["id"],
-                "mic": {"bytes": mic_bytes, "path": row["mic_path"]},
-                "ref": {"bytes": ref_bytes, "path": row["ref_path"]},
                 "clean": {"bytes": clean_bytes, "path": row["clean_path"]},
-                "endpoint_bool": bool(row["endpoint_bool"]),
-                "ser_db": float(row["ser_db"]),
-                "snr_db": float(row["snr_db"]),
+                "ref": {"bytes": ref_bytes, "path": row["ref_path"]},
+                "mic_neg_10dB": {"bytes": mic_neg_10dB_bytes, "path": row["mic_path_ser_-10dB"]},
+                "mic_neg_5dB": {"bytes": mic_neg_5dB_bytes, "path": row["mic_path_ser_-5dB"]},
+                "mic_0dB": {"bytes": mic_0dB_bytes, "path": row["mic_path_ser_0dB"]},
+                "mic_5dB": {"bytes": mic_5dB_bytes, "path": row["mic_path_ser_5dB"]},
+                "mic_10dB": {"bytes": mic_10dB_bytes, "path": row["mic_path_ser_10dB"]},
                 "distortion_type": row["distortion_type"],
+                "endpoint_bool": bool(row["endpoint_bool"]),
                 "source_near_end": row["source_near_end"],
                 "source_echo": row["source_echo"],
             })
