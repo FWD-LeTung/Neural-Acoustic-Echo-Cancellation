@@ -10,9 +10,7 @@ from safetensors.torch import load_file
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from tqdm import tqdm
 
-
-
-MODEL_PATH = "/kaggle/input/checkpoint-1000/pytorch/default/2"  # <-- Đảm bảo trỏ đúng thư mục
+MODEL_PATH = "/content/drive/MyDrive/checkpoint-1000"  # <-- Đảm bảo trỏ đúng thư mục
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 print(f"Using device: {DEVICE}")
@@ -38,12 +36,7 @@ class LumiSmartTurnV1Model(WhisperPreTrainedModel):
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
         self.encoder = WhisperEncoder(config)
-
-        # LOG: Encoder embed_dim: 768
-        # Nếu config.d_model trong file config.json là 384 (Tiny) mà weight thực tế là 768
-        # thì ta phải cưỡng ép nó là 768 để khớp weight.
-        # Tuy nhiên, thường config.json sẽ lưu đúng 768.
-        # Để an toàn, ta lấy từ config, nhưng in ra để kiểm tra.
+        
         self.input_dim = config.d_model
         print(f"Model Input Dimension: {self.input_dim} (Expected: 768)")
 
@@ -98,7 +91,7 @@ class LumiSmartTurnV1Model(WhisperPreTrainedModel):
     def forward(self, input_features, labels=None):
         encoder_outputs = self.encoder(input_features=input_features)
         hidden_states = encoder_outputs.last_hidden_state
-
+        
         # Attention Pooling
         attentions_weights = self.pool_attention(hidden_states)
         attentions_weights = softmax(attentions_weights, dim=1)
@@ -107,13 +100,13 @@ class LumiSmartTurnV1Model(WhisperPreTrainedModel):
         # Classifier
         logits = self.classifier(pooled)
         probs = torch.sigmoid(logits)
-
+        
         return {"logits": logits, "probs": probs}
 
 def load_qat_checkpoint_clean(model, folder_path):
     safetensors_path = os.path.join(folder_path, "model.safetensors")
     pytorch_bin_path = os.path.join(folder_path, "pytorch_model.bin")
-
+    
     if os.path.exists(safetensors_path):
         state_dict = load_file(safetensors_path)
     elif os.path.exists(pytorch_bin_path):
@@ -128,7 +121,6 @@ def load_qat_checkpoint_clean(model, folder_path):
             continue
         clean_dict[k] = v
 
-    # Load với strict=False nhưng hy vọng khớp hầu hết các key quan trọng
     msg = model.load_state_dict(clean_dict, strict=False)
     print(f"Load Report: {msg}")
     return model
@@ -139,35 +131,37 @@ def truncate_audio_to_last_n_seconds(audio_array, n_seconds, sample_rate):
         return audio_array[-max_samples:]
     return audio_array
 
-def main(case):
+
+def main():
     print("Initializing Model...")
     try:
         feature_extractor = WhisperFeatureExtractor.from_pretrained(MODEL_PATH)
-        # Fix cứng chunk length theo logic train
+
         if feature_extractor.chunk_length != 8:
             feature_extractor.chunk_length = 8
-            feature_extractor.n_samples = 128000
+            feature_extractor.n_samples = 128000 
 
         config = WhisperConfig.from_pretrained(MODEL_PATH)
-
+        
 
         if config.d_model != 768:
             print(f"WARNING: Config says d_model={config.d_model}, but training log says 768. Forcing 768.")
             config.d_model = 768
-
+            
         model = LumiSmartTurnV1Model(config)
         model = load_qat_checkpoint_clean(model, MODEL_PATH)
         model.to(DEVICE)
         model.eval()
         print("Model loaded successfully!")
-
+        
     except Exception as e:
         print(f"CRITICAL ERROR: {e}")
         return
 
     print("Loading dataset...")
-    dataset = load_dataset("PandaLT/Test-Fixed-SER", split="train")
-    dataset = dataset.cast_column(case, Audio(sampling_rate=16000))
+    dataset = load_dataset("PandaLT/Neural-AEC-Test-No-Noise", split="train")
+    dataset = dataset.cast_column("mic", Audio(sampling_rate=16000))
+    
 
     true_labels = []
     pred_labels = []
@@ -175,29 +169,28 @@ def main(case):
     print("Starting Inference Loop...")
     with torch.no_grad():
         for i, sample in enumerate(tqdm(dataset)):
-            audio, sr = sf.read(sample[case]["path"])
-
+            audio = sample["mic"]["array"]
             audio = truncate_audio_to_last_n_seconds(audio, 8, 16000)
-
+            
             inputs = feature_extractor(
-                audio,
-                sampling_rate=16000,
-                return_tensors="pt",
-                padding="max_length",
-                max_length=128000,
+                audio, 
+                sampling_rate=16000, 
+                return_tensors="pt", 
+                padding="max_length", 
+                max_length=128000, 
                 truncation=True
             )
-
+            
             input_features = inputs.input_features.to(DEVICE)
             outputs = model(input_features)
             prob = outputs["probs"].item()
-
+            
             # Ground Truth
             label = 1 if sample["endpoint_bool"] else 0
-
+            
             # Prediction
             pred = 1 if prob > 0.5 else 0
-
+            
             true_labels.append(label)
             pred_labels.append(pred)
 
@@ -218,9 +211,4 @@ def main(case):
     print(f"Confusion Matrix:\n{cm}")
     print("="*40)
 
-main("clean")
-main("mic_neg_10dB")
-main("mic_neg_5dB")
-main("mid_0dB")
-main("mic_5dB")
-main("mic_10dB")
+main()

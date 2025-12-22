@@ -4,7 +4,7 @@ login()
 api = HfApi()
 
 api.upload_large_folder(
-    folder_path="D:/Synthetic_Neural_AEC_dataset/Test/FixdB",
-    repo_id="PandaLT/Test-Fixed-SER",
+    folder_path="D:/Synthetic_Neural_AEC_dataset/Test/NoisyArrow",
+    repo_id="PandaLT/Neural-AEC-Test-Noisy",
     repo_type="dataset",
 )
